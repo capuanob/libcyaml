@@ -20,7 +20,7 @@ endif
 
 # Unfortunately ASan is incompatible with valgrind, so we have a special
 # variant for running with sanitisers.
-VALID_VARIANTS := release debug san
+VALID_VARIANTS := release debug san fuzz
 ifneq ($(filter $(VARIANT),$(VALID_VARIANTS)),)
 else
 $(error VARIANT must be 'debug' (default), 'san', or 'release')
@@ -68,11 +68,17 @@ CFLAGS += -std=c11 -Wall -Wextra -pedantic \
 LDFLAGS += $(LIBYAML_LIBS)
 LDFLAGS_SHARED = -Wl,-soname=$(LIB_SH_MAJ) -shared
 
+CFUZZFLAGS = $(CFLAGS)
+LDFUZZFLAGS = $(LDFLAGS)
+
 ifeq ($(VARIANT), debug)
 	CFLAGS += -O0 -g
 else ifeq ($(VARIANT), san)
 	CFLAGS += -O0 -g -fsanitize=address -fsanitize=undefined -fno-sanitize-recover
 	LDFLAGS += -fsanitize=address -fsanitize=undefined -fno-sanitize-recover
+else ifeq ($(VARIANT), fuzz)
+	CFLAGS += -O0 -g -fsanitize=fuzzer-no-link
+	LDFLAGS += -fsanitize=fuzzer-no-link
 else
 	CFLAGS += -O2 -DNDEBUG
 endif
@@ -177,6 +183,11 @@ install: $(BUILDDIR)/$(LIB_SH_MAJ) $(BUILDDIR)/$(LIB_STATIC) $(BUILDDIR)/$(LIB_P
 	$(INSTALL) -m 644 include/cyaml/* $(DESTDIR)$(PREFIX)/$(INCLUDEDIR)/cyaml
 	$(INSTALL) -d $(DESTDIR)$(PREFIX)/$(LIBDIR)/pkgconfig
 	$(INSTALL) -m 644 $(BUILDDIR)/$(LIB_PKGCON) $(DESTDIR)$(PREFIX)/$(LIBDIR)/pkgconfig/$(LIB_PKGCON)
+
+fuzzer: $(BUILDDIR)/libcyaml-fuzzer
+
+$(BUILDDIR)/libcyaml-fuzzer: fuzz/fuzz.c $(BUILDDIR)/$(LIB_STATIC)
+	$(CC) -fsanitize=fuzzer $(CPPFLAGS) $(CFUZZFLAGS) -o $@ $^ $(LDFUZZFLAGS)
 
 examples: $(BUILDDIR)/planner $(BUILDDIR)/numerical
 
